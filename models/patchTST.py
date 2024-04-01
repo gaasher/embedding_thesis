@@ -91,7 +91,6 @@ class PatchTSTDecoder(nn.Module):
         self.target_seq_size = target_seq_size
         self.num_patches = num_patches
 
-        self.layers = nn.ModuleList([nn.Linear(embed_dim, embed_dim) for _ in range(num_channels)])
         self.flatten = nn.Flatten(start_dim=-2)
         self.linear = nn.Linear(int(embed_dim * num_patches), self.target_seq_size)
         self.dropout = nn.Dropout(dropout)
