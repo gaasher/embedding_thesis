@@ -51,7 +51,7 @@ class patchTSTDataloader(pl.LightningDataModule):
         return loader1
     
 class patchTST(pl.LightningModule):
-    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, lr=1e-4):
+    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, lr=1e-4, embed_strat="patch"):
         super().__init__()
         self.save_hyperparameters()
         self.seq_len = seq_len
@@ -62,9 +62,10 @@ class patchTST(pl.LightningModule):
         self.target_seq_size = target_seq_size
         self.patch_len = patch_len
         self.dropout = dropout
+        self.embed_strat = embed_strat
         self.lr = lr
 
-        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout)
+        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout, embed_strat)
 
         # loss functions
         self.criterion = nn.MSELoss()
@@ -130,13 +131,14 @@ if __name__ == '__main__':
         "seq_len": 336,
         "num_channels": 321,
         "embed_dim": 64,
-        "heads":2,
-        "depth": 2,
+        "heads":8,
+        "depth": 6,
         "target_seq_size": 96,
         "patch_len": 8,
         "dropout": 0.0,
         "lr": 1e-4,
-        "epochs": 100,
+        "embed_strat":"learned_table",
+        "epochs": 10,
         "batch_size": 4,
         "num_workers": 0,
         "checkpoint_path": None,
@@ -174,6 +176,7 @@ if __name__ == '__main__':
         target_seq_size=config["target_seq_size"],
         patch_len=config["patch_len"],
         dropout=config["dropout"],
+        embed_strat=config['embed_strat']
     )
 
     # Define callbacks
@@ -187,7 +190,7 @@ if __name__ == '__main__':
 
     # Set up trainer and fit
     trainer = pl.Trainer(
-        accelerator="cpu",
+        accelerator="gpu",
         #devices=[0],
         #strategy="ddp_find_unused_parameters_true",
         precision='32',
