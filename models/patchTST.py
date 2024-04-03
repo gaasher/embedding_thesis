@@ -1,3 +1,4 @@
+from typing import ParamSpecKwargs
 import torch
 import torch.nn as nn
 import math
@@ -31,7 +32,7 @@ class Embedding(nn.Module):
         return self.embed(x)
 
 class PatchTSTEncoder(nn.Module):
-    def __init__(self, seq_len,  num_channels, embed_dim, heads, depth, patch_len=8, dropout=0.0):
+    def __init__(self, seq_len,  num_channels, embed_dim, heads, depth, patch_len=8, dropout=0.0, embed_strat='patch'):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_channels = num_channels
@@ -40,12 +41,19 @@ class PatchTSTEncoder(nn.Module):
         self.seq_len = seq_len
         self.patch_len = patch_len
         self.dropout = dropout
+        self.embed_strat = embed_strat
+
 
         # learnable positional encoding
         self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
-        # learnable embeddings for each channel
-        self.embed = Embedding(patch_len, embed_dim)
-
+        
+        if self.embed_strat == 'patch':
+          # learnable embeddings for each channel
+          self.embed = Embedding(patch_len, embed_dim)
+        elif self.embed_strat == 'learned_table':
+          self.embed = nn.Embedding(num_embeddings=2000, embedding_dim=embed_dim)
+        else:
+          pass
         # transformer encoder
         self.encoder = Encoder(
             dim = embed_dim,
@@ -65,9 +73,17 @@ class PatchTSTEncoder(nn.Module):
 
     def forward(self, x):
         # instance norm
+        if self.embed_strat == 'patch':
+          # if ssl we do everything separately
+          x = self.patchify(x)
+        elif self.embed_strat == 'learned_table':
+          x = torch.clip(min=-1, max=1)
+          # add 1 to x, then multiply by 1000
+          x = x+1
+          x = x*1000
+          x = x%2000
+          print(x)
 
-        # if ssl we do everything separately
-        x = self.patchify(x)
         # embed tokens
         x = self.embed(x)
         
@@ -103,9 +119,9 @@ class PatchTSTDecoder(nn.Module):
 
 
 class PatchTST(nn.Module):
-    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0):
+    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch'):
         super().__init__()
-        self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout)
+        self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout, embed_strat)
         self.decoder = PatchTSTDecoder(seq_len // patch_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
 
         self.revIN = RevIN(num_channels, affine=True, subtract_last=False)
