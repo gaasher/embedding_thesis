@@ -42,16 +42,16 @@ class PatchTSTEncoder(nn.Module):
         self.patch_len = patch_len
         self.dropout = dropout
         self.embed_strat = embed_strat
-
-
-        # learnable positional encoding
-        self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
         
         if self.embed_strat == 'patch':
           # learnable embeddings for each channel
           self.embed = Embedding(patch_len, embed_dim)
+          # learnable positional encoding
+          self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
+
         elif self.embed_strat == 'learned_table':
-          self.embed = nn.Embedding(num_embeddings=2000, embedding_dim=embed_dim)
+          self.embed = nn.Embedding(num_embeddings=2001, embedding_dim=embed_dim)
+          self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
         else:
           pass
         # transformer encoder
@@ -77,28 +77,36 @@ class PatchTSTEncoder(nn.Module):
           # if ssl we do everything separately
           x = self.patchify(x)
         elif self.embed_strat == 'learned_table':
-          x = torch.clip(min=-1, max=1)
-          # add 1 to x, then multiply by 1000
-          x = x+1
-          x = x*1000
-          x = x%2000
-          print(x)
+          # Clip the tensor to the range [-1, 1]
+          x = torch.clamp(x, min=-1, max=1)
+          # Add 1 to x, then multiply by 1000
+          x = x * 1000
+          # Now x is in the range [0, 2000]
+          # Convert to integers
+          x = x % 2000
+          x = x.long()
+          print(x.max(), x.min())
 
         # embed tokens
         x = self.embed(x)
-        
-        # reshape for transformer so that channels are passed independently
-        x = rearrange(x, 'b c num_patch emb_dim -> (b c) num_patch emb_dim')
-
+        if self.embed_strat == 'patch':
+          # reshape for transformer so that channels are passed independently
+          x = rearrange(x, 'b c num_patch emb_dim -> (b c) num_patch emb_dim')
+        elif self.embed_strat == "learned_table":
         # apply positional encoding on last 2 dims
+          x = rearrange(x, 'b seq_len c emb_dim -> (b c) seq_len emb_dim')
+       
         x = x + self.pe
 
         x = self.encoder(x)
-        x = rearrange(x, '(b c) num_patch emb_dim -> b c num_patch emb_dim', c=self.num_channels)
+        if self.embed_strat == 'patch':
+          x = rearrange(x, '(b c) num_patch emb_dim -> b c num_patch emb_dim', c=self.num_channels)
+        else:
+          x = rearrange(x, '(b c) seq_len emb_dim -> b c seq_len emb_dim', c=self.num_channels)
         return x
-    
+     
 class PatchTSTDecoder(nn.Module):
-    def __init__(self, num_patches, num_channels, embed_dim, target_seq_size, patch_len=8, dropout=0.0):
+    def __init__(self, num_patches, num_channels, embed_dim, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch'):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_channels = num_channels
@@ -106,6 +114,7 @@ class PatchTSTDecoder(nn.Module):
         self.dropout = dropout
         self.target_seq_size = target_seq_size
         self.num_patches = num_patches
+        self.embed_strat = embed_strat
 
         self.flatten = nn.Flatten(start_dim=-2)
         self.linear = nn.Linear(int(embed_dim * num_patches), self.target_seq_size)
@@ -122,7 +131,10 @@ class PatchTST(nn.Module):
     def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch'):
         super().__init__()
         self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout, embed_strat)
-        self.decoder = PatchTSTDecoder(seq_len // patch_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
+        if embed_strat == "patch":
+          self.decoder = PatchTSTDecoder(seq_len // patch_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
+        else:
+          self.decoder = PatchTSTDecoder(seq_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
 
         self.revIN = RevIN(num_channels, affine=True, subtract_last=False)
 
