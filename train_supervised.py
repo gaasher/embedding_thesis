@@ -181,7 +181,7 @@ if __name__ == '__main__':
 
     # Define callbacks
     checkpoint_callback = ModelCheckpoint(
-         dirpath='trained_models', filename=f"{model_name}_best", monitor="val_loss", mode="min",
+         dirpath='trained_models', filename=f"{model_name}_best", monitor="val_mse", mode="min",
     )
     lr_monitor = LearningRateMonitor(logging_interval="step")
     model_summary = ModelSummary(max_depth=2)
