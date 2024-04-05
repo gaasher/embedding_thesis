@@ -52,6 +52,11 @@ class PatchTSTEncoder(nn.Module):
         elif self.embed_strat == 'learned_table':
           self.embed = nn.Embedding(num_embeddings=2001, embedding_dim=embed_dim)
           self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
+        
+        elif self.embed_strat == 'naive_linear':
+          self.embed = nn.Linear(1, embed_dim)
+          self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
+
         else:
           pass
         # transformer encoder
@@ -85,23 +90,29 @@ class PatchTSTEncoder(nn.Module):
           # Convert to integers
           x = x % 2000
           x = x.long()
+        elif self.embed_strat == 'naive_linear':
+          x = x.float()
+          x = x.unsqueeze(-1)    
 
         # embed tokens
         x = self.embed(x)
+
         if self.embed_strat == 'patch':
           # reshape for transformer so that channels are passed independently
           x = rearrange(x, 'b c num_patch emb_dim -> (b c) num_patch emb_dim')
-        elif self.embed_strat == "learned_table":
+        elif self.embed_strat == "learned_table" or self.embed_strat == 'naive_linear':
         # apply positional encoding on last 2 dims
           x = rearrange(x, 'b seq_len c emb_dim -> (b c) seq_len emb_dim')
-       
+
         x = x + self.pe
 
         x = self.encoder(x)
+
         if self.embed_strat == 'patch':
           x = rearrange(x, '(b c) num_patch emb_dim -> b c num_patch emb_dim', c=self.num_channels)
         else:
           x = rearrange(x, '(b c) seq_len emb_dim -> b c seq_len emb_dim', c=self.num_channels)
+
         return x
      
 class PatchTSTDecoder(nn.Module):
