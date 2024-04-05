@@ -85,7 +85,6 @@ class PatchTSTEncoder(nn.Module):
           # Convert to integers
           x = x % 2000
           x = x.long()
-          print(x.max(), x.min())
 
         # embed tokens
         x = self.embed(x)
