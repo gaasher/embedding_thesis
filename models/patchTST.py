@@ -56,6 +56,11 @@ class PatchTSTEncoder(nn.Module):
         elif self.embed_strat == 'naive_linear':
           self.embed = nn.Linear(1, embed_dim)
           self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
+        
+        elif self.embed_strat == 'max' or self.embed_strat == 'meann' or self.embed_strat == 'sum':
+          self.embed = nn.Linear(1, embed_dim)
+          self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
+
 
         else:
           pass
@@ -78,9 +83,23 @@ class PatchTSTEncoder(nn.Module):
 
     def forward(self, x):
         # instance norm
-        if self.embed_strat == 'patch':
+        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean':
           # if ssl we do everything separately
           x = self.patchify(x)
+
+          if self.embed_strat == 'max':
+            x = x.max(dim=-1).values
+            x = x.unsqueeze(-1)
+            x = x.float()
+          elif self.embed_strat == 'sum':
+            x = x.sum(dim=-1)
+            x = x.unsqueeze(-1)
+            x = x.float()
+          elif self.embed_strat == 'mean':
+            x = x.mean(dim=-1)
+            x = x.unsqueeze(-1)
+            x = x.float()
+
         elif self.embed_strat == 'learned_table':
           # Clip the tensor to the range [-1, 1]
           x = torch.clamp(x, min=-1, max=1)
@@ -97,7 +116,7 @@ class PatchTSTEncoder(nn.Module):
         # embed tokens
         x = self.embed(x)
 
-        if self.embed_strat == 'patch':
+        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean':
           # reshape for transformer so that channels are passed independently
           x = rearrange(x, 'b c num_patch emb_dim -> (b c) num_patch emb_dim')
         elif self.embed_strat == "learned_table" or self.embed_strat == 'naive_linear':
@@ -108,7 +127,7 @@ class PatchTSTEncoder(nn.Module):
 
         x = self.encoder(x)
 
-        if self.embed_strat == 'patch':
+        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean':
           x = rearrange(x, '(b c) num_patch emb_dim -> b c num_patch emb_dim', c=self.num_channels)
         else:
           x = rearrange(x, '(b c) seq_len emb_dim -> b c seq_len emb_dim', c=self.num_channels)
@@ -141,7 +160,7 @@ class PatchTST(nn.Module):
     def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch'):
         super().__init__()
         self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout, embed_strat)
-        if embed_strat == "patch":
+        if embed_strat == "patch" or embed_strat == "max" or embed_strat == "sum" or embed_strat == "mean":
           self.decoder = PatchTSTDecoder(seq_len // patch_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
         else:
           self.decoder = PatchTSTDecoder(seq_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)

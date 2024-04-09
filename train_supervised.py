@@ -131,13 +131,13 @@ if __name__ == '__main__':
         "seq_len": 336,
         "num_channels": 321,
         "embed_dim": 64,
-        "heads":8,
-        "depth": 6,
+        "heads":2,
+        "depth": 2,
         "target_seq_size": 96,
         "patch_len": 8,
         "dropout": 0.0,
         "lr": 1e-4,
-        "embed_strat":"learned_table",
+        "embed_strat":"max",
         "epochs": 10,
         "batch_size": 4,
         "num_workers": 0,
@@ -190,7 +190,7 @@ if __name__ == '__main__':
 
     # Set up trainer and fit
     trainer = pl.Trainer(
-        accelerator="gpu",
+        accelerator="cpu",
         #devices=[0],
         #strategy="ddp_find_unused_parameters_true",
         precision='32',
