@@ -107,21 +107,21 @@ class patchTST(pl.LightningModule):
 
 
     def configure_optimizers(self) :
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=self.lr,
-            total_steps=self.trainer.estimated_stepping_batches,
-            pct_start=0.1,
-            div_factor=25,
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-            },
-        }
+        return torch.optim.AdamW(self.parameters(), lr=self.lr)
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        #     optimizer,
+        #     max_lr=self.lr,
+        #     total_steps=self.trainer.estimated_stepping_batches,
+        #     pct_start=0.1,
+        #     div_factor=25,
+        # )
+        # return {
+        #     "optimizer": optimizer,
+        #     "lr_scheduler": {
+        #         "scheduler": scheduler,
+        #         "interval": "step",
+        #     },
+        # }
 
 
 
