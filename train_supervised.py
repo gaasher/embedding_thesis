@@ -51,7 +51,8 @@ class patchTSTDataloader(pl.LightningDataModule):
         return loader1
     
 class patchTST(pl.LightningModule):
-    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, lr=1e-4, embed_strat="patch"):
+    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, lr=1e-4, embed_strat="patch", decay=0.9,
+                 ema=False):
         super().__init__()
         self.save_hyperparameters()
         self.seq_len = seq_len
@@ -65,7 +66,7 @@ class patchTST(pl.LightningModule):
         self.embed_strat = embed_strat
         self.lr = lr
 
-        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout, embed_strat)
+        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout, embed_strat, decay, ema)
 
         # loss functions
         self.criterion = nn.MSELoss()
@@ -137,6 +138,8 @@ if __name__ == '__main__':
         "patch_len": 8,
         "dropout": 0.0,
         "lr": 1e-4,
+        "ema": True, # "True" for EMA-like residual addition
+        "decay": 0.9,
         "embed_strat":"max",
         "epochs": 10,
         "batch_size": 4,
@@ -176,7 +179,9 @@ if __name__ == '__main__':
         target_seq_size=config["target_seq_size"],
         patch_len=config["patch_len"],
         dropout=config["dropout"],
-        embed_strat=config['embed_strat']
+        embed_strat=config['embed_strat'],
+        ema=config["ema"],
+        decay=config["decay"],
     )
 
     # Define callbacks

@@ -32,7 +32,7 @@ class Embedding(nn.Module):
         return self.embed(x)
 
 class PatchTSTEncoder(nn.Module):
-    def __init__(self, seq_len,  num_channels, embed_dim, heads, depth, patch_len=8, dropout=0.0, embed_strat='patch'):
+    def __init__(self, seq_len,  num_channels, embed_dim, heads, depth, patch_len=8, dropout=0.0, embed_strat='patch', decay=0.9, ema=False):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_channels = num_channels
@@ -42,6 +42,8 @@ class PatchTSTEncoder(nn.Module):
         self.patch_len = patch_len
         self.dropout = dropout
         self.embed_strat = embed_strat
+        self.decay = decay
+        self.ema = ema
         
         if self.embed_strat == 'patch':
           # learnable embeddings for each channel
@@ -57,7 +59,7 @@ class PatchTSTEncoder(nn.Module):
           self.embed = nn.Linear(1, embed_dim)
           self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
         
-        elif self.embed_strat == 'max' or self.embed_strat == 'meann' or self.embed_strat == 'sum':
+        elif self.embed_strat == 'max' or self.embed_strat == 'mean' or self.embed_strat == 'sum':
           self.embed = nn.Linear(1, embed_dim)
           self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
 
@@ -123,6 +125,13 @@ class PatchTSTEncoder(nn.Module):
         # apply positional encoding on last 2 dims
           x = rearrange(x, 'b seq_len c emb_dim -> (b c) seq_len emb_dim')
 
+        if self.ema == True:
+          # Applying EMA-like residual addition
+          ema_x = torch.zeros_like(x[:, 0, :])
+          for i in range(x.shape[1]):
+              ema_x = self.decay * ema_x + (1 - self.decay) * x[:, i, :]
+              x[:, i, :] = ema_x
+
         x = x + self.pe
 
         x = self.encoder(x)
@@ -157,7 +166,8 @@ class PatchTSTDecoder(nn.Module):
 
 
 class PatchTST(nn.Module):
-    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch'):
+    def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, embed_strat='patch',
+                 decay=0.9, ema=False):
         super().__init__()
         self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout, embed_strat)
         if embed_strat == "patch" or embed_strat == "max" or embed_strat == "sum" or embed_strat == "mean":
