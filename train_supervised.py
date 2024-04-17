@@ -134,11 +134,14 @@ class patchTST(pl.LightningModule):
 if __name__ == '__main__':
     pl.seed_everything(40)
     # Load dataset
-    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/']# './datasets/weather',
-             #'./datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
-    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv']#,'weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
-    freq = ['d', 'h', 'h',]# 't', 'h', 'h', 't', 't']
-    feat_len = [7, 321, 862]#, 21, 7, 7, 7, 7]
+    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
+             './datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
+    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv','weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
+    freq = ['d', 'h', 'h', 't', 'h', 'h', 't', 't']
+    feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
+
+    epochs = [20, 5, 5, 10, 20, 20, 20, 20]
+    batch_size=[16, 4, 4, 16, 16, 16, 16, 16]
 
     for i in range(len(paths)):
         print(f'Running on {files[i]}')
@@ -152,8 +155,8 @@ if __name__ == '__main__':
         config = {
                 "seq_len": seq_len,
                 "num_channels": feat_len[i],
-                "embed_dim": 64,
-                "heads":2,
+                "embed_dim": 256,
+                "heads":4,
                 "depth": 2,
                 "target_seq_size": target_len,
                 "patch_len": 8,
@@ -162,8 +165,8 @@ if __name__ == '__main__':
                 "ema": False, # "True" for EMA-like residual addition
                 "decay": 0.9,
                 "embed_strat":"patch",
-                "epochs": 5,
-                "batch_size": 4,
+                "epochs": epochs[i],
+                "batch_size": batch_size[i],
                 "num_workers": 0,
                 "checkpoint_path": None,
                 "freq": freq[i],
@@ -183,6 +186,10 @@ if __name__ == '__main__':
         config = wandb_logger.experiment.config
         model_name = wandb_logger.experiment.name
         wandb_logger.experiment.log_code(".")
+
+        # cahnge wandb run name with dataset
+        model_name = model_name + f"_{files[i].split('.')[0]}"
+        wandb_logger.experiment.name = model_name
 
         # add dataset prefix to model name
         model_name = f"{files[i].split('.')[0]}_{model_name}"
