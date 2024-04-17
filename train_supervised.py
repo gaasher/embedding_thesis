@@ -134,26 +134,28 @@ class patchTST(pl.LightningModule):
 if __name__ == '__main__':
     pl.seed_everything(40)
     # Load dataset
-    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
-             './datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
-    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv', 'weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
-    freq = ['d', 'h', 'h', 't', 'h', 'h', 't', 't']
-    feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
+    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/']# './datasets/weather',
+             #'./datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
+    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv']#,'weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
+    freq = ['d', 'h', 'h',]# 't', 'h', 'h', 't', 't']
+    feat_len = [7, 321, 862]#, 21, 7, 7, 7, 7]
 
     for i in range(len(paths)):
         print(f'Running on {files[i]}')
+        seq_len = 336
+        target_len = 96
 
-        if files[i] == 'illness.csv':
+        if files[i] == 'national_illness.csv':
             seq_len = 96
             target_len = 24
 
         config = {
-                "seq_len": 336,
-                "num_channels": 321,
+                "seq_len": seq_len,
+                "num_channels": feat_len[i],
                 "embed_dim": 64,
                 "heads":2,
                 "depth": 2,
-                "target_seq_size": 96,
+                "target_seq_size": target_len,
                 "patch_len": 8,
                 "dropout": 0.0,
                 "lr": 1e-4,
@@ -164,12 +166,11 @@ if __name__ == '__main__':
                 "batch_size": 4,
                 "num_workers": 0,
                 "checkpoint_path": None,
+                "freq": freq[i],
+                "root_path": paths[i],
+                "data_path": files[i],
                 }
         
-        seq_len = config["seq_len"]
-        target_len = config["target_seq_size"]
-        feature_len = feat_len[i]
-
 
         # Initialize wandb
         wandb_logger = WandbLogger(
@@ -178,31 +179,32 @@ if __name__ == '__main__':
             log_model=False,
             mode="offline",
         )
-        print('-')
+        
         config = wandb_logger.experiment.config
         model_name = wandb_logger.experiment.name
         wandb_logger.experiment.log_code(".")
-        print('-')
+
+        # add dataset prefix to model name
+        model_name = f"{files[i].split('.')[0]}_{model_name}"
 
         dataset = patchTSTDataloader(
-            root_path=paths[i],
-            data_path=files[i],
-            freq=freq[i],
+            root_path=config["root_path"],
+            data_path=config["data_path"],
+            freq=config["freq"],
             batch_size=config["batch_size"],
             shuffle=True,
             num_workers=config["num_workers"],
-            seq_len=seq_len,
-            target_len=target_len,
+            seq_len=config["seq_len"],
+            target_len=config["target_seq_size"],
         )
-        print('-')
         # Initialize model
         model = patchTST(
             seq_len=seq_len,
-            num_channels=feat_len,
+            num_channels=config["num_channels"],
             embed_dim=config["embed_dim"],
             heads=config["heads"],
             depth=config["depth"],
-            target_seq_size=target_len,
+            target_seq_size=config["target_seq_size"],
             patch_len=config["patch_len"],
             dropout=config["dropout"],
             embed_strat=config['embed_strat'],
@@ -230,7 +232,6 @@ if __name__ == '__main__':
             logger=wandb_logger,
             # accumulate_grad_batches=2,
         )
-        print('-')
         if config['checkpoint_path'] is not None:
             print("Loading pre-trained checkpoint")
             trainer.fit(model, dataset, ckpt_path=config['checkpoint_path'])
