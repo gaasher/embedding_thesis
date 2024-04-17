@@ -140,8 +140,9 @@ if __name__ == '__main__':
     freq = ['d', 'h', 'h', 't', 'h', 'h', 't', 't']
     feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
 
-    epochs = [20, 5, 5, 10, 20, 20, 20, 20]
+    epochs = [100, 5, 5, 10, 20, 20, 20, 20]
     batch_size=[16, 4, 4, 16, 16, 16, 16, 16]
+
 
     for i in range(len(paths)):
         print(f'Running on {files[i]}')
