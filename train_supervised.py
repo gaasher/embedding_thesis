@@ -29,6 +29,7 @@ class patchTSTDataloader(pl.LightningDataModule):
         self.features = features
         self.data_path = data_path
 
+        print('--')
 
         self.train_dataset = Dataset_Custom(root_path=self.root, flag="train", size=(seq_len, 0, target_len), 
                                             features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
@@ -36,6 +37,7 @@ class patchTSTDataloader(pl.LightningDataModule):
                                             features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
         self.test_dataset = Dataset_Custom(root_path=self.root, flag="test", size=(seq_len, 0, target_len), 
                                             features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
+        print('--')
 
         self.train_loader  = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=self.num_workers)
         self.val_loader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
@@ -131,27 +133,6 @@ class patchTST(pl.LightningModule):
 
 if __name__ == '__main__':
     pl.seed_everything(40)
-
-    config = {
-        "seq_len": 336,
-        "num_channels": 321,
-        "embed_dim": 64,
-        "heads":1,
-        "depth": 1,
-        "target_seq_size": 96,
-        "patch_len": 8,
-        "dropout": 0.0,
-        "lr": 1e-4,
-        "ema": False, # "True" for EMA-like residual addition
-        "decay": 0.9,
-        "embed_strat":"patch",
-        "epochs": 5,
-        "batch_size": 4,
-        "num_workers": 0,
-        "checkpoint_path": None,
-    }
-
-
     # Load dataset
     paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
              './datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
@@ -160,16 +141,35 @@ if __name__ == '__main__':
     feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
 
     for i in range(len(paths)):
-
         print(f'Running on {files[i]}')
 
         if files[i] == 'illness.csv':
             seq_len = 96
             target_len = 24
+
+        config = {
+                "seq_len": 336,
+                "num_channels": 321,
+                "embed_dim": 64,
+                "heads":2,
+                "depth": 2,
+                "target_seq_size": 96,
+                "patch_len": 8,
+                "dropout": 0.0,
+                "lr": 1e-4,
+                "ema": False, # "True" for EMA-like residual addition
+                "decay": 0.9,
+                "embed_strat":"patch",
+                "epochs": 5,
+                "batch_size": 4,
+                "num_workers": 0,
+                "checkpoint_path": None,
+                }
+        
         seq_len = config["seq_len"]
         target_len = config["target_seq_size"]
         feature_len = feat_len[i]
-    
+
 
         # Initialize wandb
         wandb_logger = WandbLogger(
@@ -178,12 +178,11 @@ if __name__ == '__main__':
             log_model=False,
             mode="offline",
         )
+        print('-')
         config = wandb_logger.experiment.config
         model_name = wandb_logger.experiment.name
         wandb_logger.experiment.log_code(".")
-        #add prefix of file to model name
-        model_name = model_name + files[0].split('.')[0]
-
+        print('-')
 
         dataset = patchTSTDataloader(
             root_path=paths[i],
@@ -195,7 +194,7 @@ if __name__ == '__main__':
             seq_len=seq_len,
             target_len=target_len,
         )
-
+        print('-')
         # Initialize model
         model = patchTST(
             seq_len=seq_len,
@@ -210,15 +209,12 @@ if __name__ == '__main__':
             ema=config["ema"],
             decay=config["decay"],
         )
-
         # Define callbacks
         checkpoint_callback = ModelCheckpoint(
             dirpath='trained_models', filename=f"{model_name}_best", monitor="val_mse", mode="min",
         )
         lr_monitor = LearningRateMonitor(logging_interval="step")
         model_summary = ModelSummary(max_depth=2)
-
-
 
         # Set up trainer and fit
         trainer = pl.Trainer(
@@ -234,14 +230,17 @@ if __name__ == '__main__':
             logger=wandb_logger,
             # accumulate_grad_batches=2,
         )
-
+        print('-')
         if config['checkpoint_path'] is not None:
             print("Loading pre-trained checkpoint")
             trainer.fit(model, dataset, ckpt_path=config['checkpoint_path'])
         else:
             trainer.fit(model, dataset)
         
+        
         # Evaluate on test dataset
+        # load model from checkpoint
+        model = patchTST.load_from_checkpoint(f"trained_models/{model_name}_best.ckpt")
         test_results = trainer.test(model, datamodule=dataset)
         print(f"Test Results: {test_results}")
 
