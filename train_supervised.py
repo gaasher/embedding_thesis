@@ -16,22 +16,26 @@ from datasets import Dataset_Custom, Dataset_ETT_hour, Dataset_ETT_minute, Datas
 
 
 class patchTSTDataloader(pl.LightningDataModule):
-    def __init__(self, path, batch_size, shuffle=True, num_workers=0, seq_len=336, target_len=96):
+    def __init__(self, batch_size, shuffle=True, num_workers=0, seq_len=336, target_len=96, freq='h', 
+                 root_path='./datasets/electricity/', features="M", data_path='electricity.csv', timeenc=1):
         super().__init__()
-        self.path = path
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.num_workers = num_workers
         self.seq_len = seq_len
         self.target_len = target_len
+        self.freq = freq
+        self.root = root_path
+        self.features = features
+        self.data_path = data_path
 
 
-        self.train_dataset = Dataset_Custom(root_path='./datasets/electricity/', flag="train", size=(seq_len, 0, target_len), 
-                                            features="M", data_path='electricity.csv', freq='h')
-        self.val_dataset = Dataset_Custom(root_path='./datasets/electricity/', flag="val", size=(seq_len, 0, target_len), 
-                                            features="M", data_path='electricity.csv', freq='h')
-        self.test_dataset = Dataset_Custom(root_path='./datasets/electricity/', flag="test", size=(seq_len, 0, target_len), 
-                                            features="M", data_path='electricity.csv', freq='h')
+        self.train_dataset = Dataset_Custom(root_path=self.root, flag="train", size=(seq_len, 0, target_len), 
+                                            features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
+        self.val_dataset = Dataset_Custom(root_path=self.root, flag="val", size=(seq_len, 0, target_len), 
+                                            features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
+        self.test_dataset = Dataset_Custom(root_path=self.root, flag="test", size=(seq_len, 0, target_len), 
+                                            features=self.features, data_path=self.data_path, freq=self.freq, timeenc=timeenc)
 
         self.train_loader  = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=self.num_workers)
         self.val_loader = DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
@@ -132,91 +136,114 @@ if __name__ == '__main__':
         "seq_len": 336,
         "num_channels": 321,
         "embed_dim": 64,
-        "heads":2,
-        "depth": 2,
+        "heads":1,
+        "depth": 1,
         "target_seq_size": 96,
         "patch_len": 8,
         "dropout": 0.0,
         "lr": 1e-4,
-        "ema": True, # "True" for EMA-like residual addition
+        "ema": False, # "True" for EMA-like residual addition
         "decay": 0.9,
-        "embed_strat":"max",
-        "epochs": 10,
+        "embed_strat":"patch",
+        "epochs": 5,
         "batch_size": 4,
         "num_workers": 0,
         "checkpoint_path": None,
     }
 
 
-    # Initialize wandb
-    wandb_logger = WandbLogger(
-        project="timeseries_embeds",
-        config=config,
-        log_model=False,
-        mode="offline",
-    )
-    config = wandb_logger.experiment.config
-    model_name = wandb_logger.experiment.name
-    wandb_logger.experiment.log_code(".")
-
     # Load dataset
-    dataset = patchTSTDataloader(
-        path="./datasets/electricity/",
-        batch_size=config["batch_size"],
-        shuffle=True,
-        num_workers=config["num_workers"],
-        seq_len=config["seq_len"],
-        target_len=config["target_seq_size"],
-    )
+    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
+             './datasets/ETT-small', './datasdets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
+    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv', 'weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
+    freq = ['d', 'h', 'h', 't', 'h', 'h', 't', 't']
+    feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
 
-    # Initialize model
-    model = patchTST(
-        seq_len=config["seq_len"],
-        num_channels=config["num_channels"],
-        embed_dim=config["embed_dim"],
-        heads=config["heads"],
-        depth=config["depth"],
-        target_seq_size=config["target_seq_size"],
-        patch_len=config["patch_len"],
-        dropout=config["dropout"],
-        embed_strat=config['embed_strat'],
-        ema=config["ema"],
-        decay=config["decay"],
-    )
+    for i in range(len(paths)):
 
-    # Define callbacks
-    checkpoint_callback = ModelCheckpoint(
-         dirpath='trained_models', filename=f"{model_name}_best", monitor="val_mse", mode="min",
-    )
-    lr_monitor = LearningRateMonitor(logging_interval="step")
-    model_summary = ModelSummary(max_depth=2)
+        print(f'Running on {files[i]}')
 
-
-
-    # Set up trainer and fit
-    trainer = pl.Trainer(
-        accelerator="cpu",
-        #devices=[0],
-        #strategy="ddp_find_unused_parameters_true",
-        precision='32',
-        sync_batchnorm=True,
-        # use_distributed_sampler=True,
-        max_epochs=config["epochs"],
-        callbacks=[checkpoint_callback, lr_monitor, model_summary],
-        gradient_clip_val=1.,
-        logger=wandb_logger,
-        # accumulate_grad_batches=2,
-    )
-
-    if config['checkpoint_path'] is not None:
-        print("Loading pre-trained checkpoint")
-        trainer.fit(model, dataset, ckpt_path=config['checkpoint_path'])
-    else:
-        trainer.fit(model, dataset)
+        if files[i] == 'illness.csv':
+            seq_len = 96
+            target_len = 24
+        seq_len = config["seq_len"]
+        target_len = config["target_seq_size"]
+        feature_len = feat_len[i]
     
-    # Evaluate on test dataset
-    test_results = trainer.test(model, datamodule=dataset)
-    print(f"Test Results: {test_results}")
 
-    # Finish wandb run
-    wandb_logger.experiment.finish()
+        # Initialize wandb
+        wandb_logger = WandbLogger(
+            project="timeseries_embeds",
+            config=config,
+            log_model=False,
+            mode="offline",
+        )
+        config = wandb_logger.experiment.config
+        model_name = wandb_logger.experiment.name
+        wandb_logger.experiment.log_code(".")
+        #add prefix of file to model name
+        model_name = model_name + files[0].split('.')[0]
+
+
+        dataset = patchTSTDataloader(
+            root_path=paths[i],
+            data_path=files[i],
+            freq=freq[i],
+            batch_size=config["batch_size"],
+            shuffle=True,
+            num_workers=config["num_workers"],
+            seq_len=seq_len,
+            target_len=target_len,
+        )
+
+        # Initialize model
+        model = patchTST(
+            seq_len=seq_len,
+            num_channels=feat_len,
+            embed_dim=config["embed_dim"],
+            heads=config["heads"],
+            depth=config["depth"],
+            target_seq_size=target_len,
+            patch_len=config["patch_len"],
+            dropout=config["dropout"],
+            embed_strat=config['embed_strat'],
+            ema=config["ema"],
+            decay=config["decay"],
+        )
+
+        # Define callbacks
+        checkpoint_callback = ModelCheckpoint(
+            dirpath='trained_models', filename=f"{model_name}_best", monitor="val_mse", mode="min",
+        )
+        lr_monitor = LearningRateMonitor(logging_interval="step")
+        model_summary = ModelSummary(max_depth=2)
+
+
+
+        # Set up trainer and fit
+        trainer = pl.Trainer(
+            accelerator="cpu",
+            #devices=[0],
+            #strategy="ddp_find_unused_parameters_true",
+            precision='32',
+            sync_batchnorm=True,
+            # use_distributed_sampler=True,
+            max_epochs=config["epochs"],
+            callbacks=[checkpoint_callback, lr_monitor, model_summary],
+            gradient_clip_val=1.,
+            logger=wandb_logger,
+            # accumulate_grad_batches=2,
+        )
+
+        if config['checkpoint_path'] is not None:
+            print("Loading pre-trained checkpoint")
+            trainer.fit(model, dataset, ckpt_path=config['checkpoint_path'])
+        else:
+            trainer.fit(model, dataset)
+        
+        # Evaluate on test dataset
+        test_results = trainer.test(model, datamodule=dataset)
+        print(f"Test Results: {test_results}")
+
+        # Finish wandb run
+        wandb_logger.experiment.finish()
