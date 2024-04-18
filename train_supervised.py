@@ -135,13 +135,19 @@ if __name__ == '__main__':
     pl.seed_everything(40)
     # Load dataset
     paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
-             './datasets/ETT-small', './datasets/ETT-small', './datasets/ETT-small', './datasets/ETT-small']
-    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv','weather.csv', 'ETTh1.csv', 'ETTh2.csv', 'ETTm1.csv', 'ETTm2.csv']
-    freq = ['d', 'h', 'h', 't', 'h', 'h', 't', 't']
-    feat_len = [7, 321, 862, 21, 7, 7, 7, 7]
+             './datasets/ETT-small', './datasets/ETT-small', 
+             './datasets/ETT-small', './datasets/ETT-small']
+    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv','weather.csv', 'ETTh1.csv', 'ETTh2.csv', 
+            'ETTm1.csv', 'ETTm2.csv']
+    freq = ['d', 'h', 'h', 't', 'h', 'h', 
+            't', 't']
+    feat_len = [7, 321, 862, 21, 7, 7, 
+                7, 7]
 
-    epochs = [100, 5, 5, 10, 20, 20, 20, 20]
-    batch_size=[16, 4, 4, 16, 16, 16, 16, 16]
+    epochs = [100, 5, 5, 10, 20, 20, 
+                20, 20]
+    batch_size=[16, 4, 4, 16, 16, 16, 
+                128, 128]
 
 
     for i in range(len(paths)):
