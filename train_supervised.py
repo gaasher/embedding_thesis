@@ -58,7 +58,7 @@ class patchTSTDataloader(pl.LightningDataModule):
     
 class patchTST(pl.LightningModule):
     def __init__(self, seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len=8, dropout=0.0, lr=1e-4, embed_strat="patch", decay=0.9,
-                 ema=False):
+                 ema=False, residual=False, embed_mode='linear'):
         super().__init__()
         self.save_hyperparameters()
         self.seq_len = seq_len
@@ -71,8 +71,14 @@ class patchTST(pl.LightningModule):
         self.dropout = dropout
         self.embed_strat = embed_strat
         self.lr = lr
+        self.decay = decay
+        self.ema = ema
+        self.residual = residual
+        self.embed_mode = embed_mode
 
-        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout, embed_strat, decay, ema)
+
+        self.model = PatchTST(seq_len, num_channels, embed_dim, heads, depth, target_seq_size, patch_len, dropout, 
+                              embed_strat, decay, ema, residual, embed_mode)
 
         # loss functions
         self.criterion = nn.MSELoss()
@@ -171,7 +177,9 @@ if __name__ == '__main__':
                 "lr": 1e-4,
                 "ema": False, # "True" for EMA-like residual addition
                 "decay": 0.9,
+                "residual": True, # "True" for residual addition
                 "embed_strat":"patch",
+                "embed_mode": "cnn", # "linear" or "cnn
                 "epochs": epochs[i],
                 "batch_size": batch_size[i],
                 "num_workers": 0,
@@ -221,6 +229,8 @@ if __name__ == '__main__':
             embed_strat=config['embed_strat'],
             ema=config["ema"],
             decay=config["decay"],
+            residual=config["residual"],
+            embed_mode=config["embed_mode"],
         )
         # Define callbacks
         checkpoint_callback = ModelCheckpoint(
