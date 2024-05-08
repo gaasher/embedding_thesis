@@ -5,6 +5,8 @@ import math
 from einops import rearrange, repeat
 from x_transformers import Encoder
 from models.revIN import RevIN
+from torch.fft import rfftn, fftshift
+
 '''
 Future embedding strategies:
 1) patchify each chanel into several tokens, concat tokens
@@ -23,6 +25,8 @@ class Embedding(nn.Module):
     def __init__(self, input_size, embed_dim, mode='linear'):
         super().__init__()
         self.mode = mode
+        self.embed_dim = embed_dim
+        self.input_size = input_size
 
         self.embed = nn.Sequential(
             nn.Linear(input_size, embed_dim),
@@ -36,6 +40,11 @@ class Embedding(nn.Module):
             nn.Conv1d(in_channels=8, out_channels=32, kernel_size=3, padding=1),
             nn.ReLU(),
         )
+
+        elif mode == 'fft':
+            # Parameters for STFT
+            self.win_length = input_size  # window length for STFT
+            self.hop_length = self.win_length // 8  # stride; set it so that seq_len is reduced by 8
 
 
 
@@ -51,6 +60,22 @@ class Embedding(nn.Module):
           x = self.embed(x)
           x = rearrange(x, '(b c s) e p -> b c s (e p)', b=batch_size, c=num_channels, s=seq_len)
           return x
+
+        elif self.mode == 'fft':
+          x = rearrange(x, 'b c s p -> b c (s p)')
+          # Assuming x is of shape (batch_size, channels, seq_len)
+          # Apply STFT
+          x = rfftn(x, dim=(-1,))  # Perform FFT on the last dimension
+          x = fftshift(x, dim=-1)  # Center the frequencies
+          # Take the magnitude (absolute value) of the complex output
+          x = x.abs()
+          # Reshape to original batch and channel dimensions, adjust seq_len and set embed_dim
+          # Optionally, linearly project to a specific embed_dim if different from output of rfftn
+          if x.shape[-1] != self.embed_dim:
+              projection = nn.Linear(x.shape[-1], self.embed_dim).to(x.device)
+              x = projection(x)
+          return x
+
 
         return self.embed(x)
 
@@ -84,10 +109,17 @@ class PatchTSTEncoder(nn.Module):
         elif self.embed_strat == 'naive_linear':
           self.embed = nn.Linear(1, embed_dim)
           self.pe = nn.Parameter(torch.randn(1, seq_len, embed_dim))
-        
+
+        elif self.embed_strat == 'patch++':
+          self.embed = Embedding(patch_len, embed_dim, mode=self.embed_mode)
+          self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
+          # add another linear layer that takes the entire sequence as input and outputs custom positional encoding
+          self.pe2 = nn.Linear(seq_len, seq_len)
+
         else:
           self.embed = nn.Linear(1, embed_dim)
           self.pe = nn.Parameter(torch.randn(1, (seq_len // patch_len), embed_dim))
+
 
         # transformer encoder
         self.encoder = Encoder(
@@ -137,11 +169,17 @@ class PatchTSTEncoder(nn.Module):
         elif self.embed_strat == 'naive_linear':
           x = x.float()
           x = x.unsqueeze(-1)    
-
+        elif self.embed_strat == 'patch++':
+          pe_x = self.pe2(rearrange(x, 'b s c -> b c s').float())
+          pe_x = rearrange(pe_x, 'b c (s patch_len) -> b c s patch_len', patch_len=self.patch_len)
+          x = self.patchify(x)
+          x += pe_x
+        else:
+           pass
         # embed tokens
         x = self.embed(x)
 
-        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean':
+        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean' or self.embed_strat == 'patch++':
           # reshape for transformer so that channels are passed independently
           x = rearrange(x, 'b c num_patch emb_dim -> (b c) num_patch emb_dim')
         elif self.embed_strat == "learned_table" or self.embed_strat == 'naive_linear':
@@ -164,7 +202,7 @@ class PatchTSTEncoder(nn.Module):
 
         x = self.encoder(x)
 
-        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean':
+        if self.embed_strat == 'patch' or self.embed_strat == 'max' or self.embed_strat == 'sum' or self.embed_strat == 'mean' or self.embed_strat == 'patch++':
           x = rearrange(x, '(b c) num_patch emb_dim -> b c num_patch emb_dim', c=self.num_channels)
         else:
           x = rearrange(x, '(b c) seq_len emb_dim -> b c seq_len emb_dim', c=self.num_channels)
@@ -200,7 +238,7 @@ class PatchTST(nn.Module):
         self.encoder = PatchTSTEncoder(seq_len, num_channels, embed_dim, heads, depth, patch_len, dropout, 
                                        embed_strat, residual=residual, embed_mode=embed_mode)
 
-        if embed_strat == "patch" or embed_strat == "max" or embed_strat == "sum" or embed_strat == "mean":
+        if embed_strat == "patch" or embed_strat == "max" or embed_strat == "sum" or embed_strat == "mean" or embed_strat == "patch++":
           self.decoder = PatchTSTDecoder(seq_len // patch_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)
         else:
           self.decoder = PatchTSTDecoder(seq_len, num_channels, embed_dim, target_seq_size, patch_len, dropout)

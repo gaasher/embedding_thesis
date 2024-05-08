@@ -152,7 +152,7 @@ if __name__ == '__main__':
 
     epochs = [100, 5, 5, 10, 20, 20, 
                 20, 20]
-    batch_size=[16, 4, 4, 16, 16, 16, 
+    batch_size=[1, 4, 4, 16, 16, 16, 
                 128, 128]
 
 
@@ -177,9 +177,9 @@ if __name__ == '__main__':
                 "lr": 1e-4,
                 "ema": False, # "True" for EMA-like residual addition
                 "decay": 0.9,
-                "residual": True, # "True" for residual addition
-                "embed_strat":"patch",
-                "embed_mode": "cnn", # "linear" or "cnn
+                "residual": False, # "True" for residual addition
+                "embed_strat":"patch++",
+                "embed_mode": "linear", # "linear" or "cnn
                 "epochs": epochs[i],
                 "batch_size": batch_size[i],
                 "num_workers": 0,
