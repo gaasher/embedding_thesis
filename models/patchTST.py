@@ -188,14 +188,24 @@ class PatchTSTEncoder(nn.Module):
 
         if self.ema == True:
           # Applying EMA-like residual addition
-          ema_x = torch.zeros_like(x[:, 0, :])
-          for i in range(x.shape[1]):
-              ema_x = self.decay * ema_x + (1 - self.decay) * x[:, i, :]
-              x[:, i, :] = ema_x
+          alpha = 0.1  # Adjust alpha as needed for smoothing
+          ema = 0  # Initialize EMA value
+          smoothed_tokens = torch.zeros_like(x)
+          for i in range(x.size(0)):
+              ema = alpha * x[i] + (1 - alpha) * ema  # Update EMA from previous tokens
+              smoothed_tokens[i] = x[i] + ema  # Add EMA to the original token
+          x = smoothed_tokens
+
         
         if self.residual == True:
-           #add a residual of the token before and after the current token (0.1 * before + 0.8 * current + 0.1 * after)
-          x = x + torch.cat([x[:, 0:1, :], x[:, :-1, :]], dim=1) * 0.1 + torch.cat([x[:, 1:, :], x[:, -1:, :]], dim=1) * 0.1
+          #add a residual of the token before and after the current token (0.1 * before + 0.8 * current + 0.1 * after)
+          residual_tokens = torch.zeros_like(x)
+          for i in range(x.size(0)):
+              before = x[i - 1] if i > 0 else 0  # Handle boundary
+              after = x[i + 1] if i < x.size(0) - 1 else 0  # Handle boundary
+              residual_tokens[i] = 0.1 * before + 0.8 * x[i] + 0.1 * after
+          x = residual_tokens
+
 
 
         x = x + self.pe

@@ -177,8 +177,8 @@ if __name__ == '__main__':
                 "lr": 1e-4,
                 "ema": False, # "True" for EMA-like residual addition
                 "decay": 0.9,
-                "residual": False, # "True" for residual addition
-                "embed_strat":"patch++",
+                "residual": True, # "True" for residual addition
+                "embed_strat":"patch",
                 "embed_mode": "linear", # "linear" or "cnn
                 "epochs": epochs[i],
                 "batch_size": batch_size[i],
