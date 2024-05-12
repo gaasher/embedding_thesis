@@ -6,6 +6,7 @@ from einops import rearrange, repeat
 from x_transformers import Encoder
 from models.revIN import RevIN
 from torch.fft import rfftn, fftshift
+import torch.nn.functional as F
 
 '''
 Future embedding strategies:
@@ -187,23 +188,28 @@ class PatchTSTEncoder(nn.Module):
           x = rearrange(x, 'b seq_len c emb_dim -> (b c) seq_len emb_dim')
 
         if self.ema == True:
-          # Applying EMA-like residual addition
-          alpha = 0.1  # Adjust alpha as needed for smoothing
-          ema = 0  # Initialize EMA value
-          smoothed_tokens = torch.zeros_like(x)
-          for i in range(x.size(0)):
-              ema = alpha * x[i] + (1 - alpha) * ema  # Update EMA from previous tokens
-              smoothed_tokens[i] = x[i] + ema  # Add EMA to the original token
-          x = smoothed_tokens
+          alpha = 0.1  # Smoothing factor, adjust as needed
+          # Initialize EMA tensor, same shape as x, starting with the first token's values
+          ema = torch.zeros_like(x)
+          ema[:, 0, :] = x[:, 0, :]  # Start EMA with the first token for each batch and feature
+
+          # Calculate EMA across each token for each batch and feature
+          for i in range(1, x.shape[1]):  # Start from second token as first is already initialized
+              ema[:, i, :] = alpha * x[:, i, :] + (1 - alpha) * ema[:, i - 1, :]
+
+          # Add EMA to original tokens
+          x += ema
+
 
         
         if self.residual == True:
-          #add a residual of the token before and after the current token (0.1 * before + 0.8 * current + 0.1 * after)
-          residual_tokens = torch.zeros_like(x)
-          for i in range(x.size(0)):
-              before = x[i - 1] if i > 0 else 0  # Handle boundary
-              after = x[i + 1] if i < x.size(0) - 1 else 0  # Handle boundary
-              residual_tokens[i] = 0.1 * before + 0.8 * x[i] + 0.1 * after
+          padded_x = F.pad(x, (0, 0, 1, 1), "constant", 0)  # No padding for features, pad tokens dimension
+
+          # Slicing to get 'before' and 'after' tensors
+          before = padded_x[:, :-2, :]  
+          after = padded_x[:, 2:, :]    
+          # Calculate the residuals
+          residual_tokens = 0.1 * before + 0.8 * x + 0.1 * after  # All have shape [110, 12, 256]
           x = residual_tokens
 
 
