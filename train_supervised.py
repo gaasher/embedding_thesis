@@ -140,24 +140,24 @@ class patchTST(pl.LightningModule):
 if __name__ == '__main__':
     pl.seed_everything(40)
     # Load dataset
-    paths = ['./datasets/illness/', './datasets/electricity/', './datasets/traffic/', './datasets/weather',
-             './datasets/ETT-small', './datasets/ETT-small', 
-             './datasets/ETT-small', './datasets/ETT-small']
-    files = ['national_illness.csv', 'electricity.csv', 'traffic.csv','weather.csv', 'ETTh1.csv', 'ETTh2.csv', 
-            'ETTm1.csv', 'ETTm2.csv']
-    freq = ['d', 'h', 'h', 't', 'h', 'h', 
-            't', 't']
-    feat_len = [7, 321, 862, 21, 7, 7, 
-                7, 7]
+    paths = ['./datasets/illness/',]#, './datasets/electricity/', './datasets/traffic/', './datasets/weather',
+            #  './datasets/ETT-small', './datasets/ETT-small', 
+            #  './datasets/ETT-small', './datasets/ETT-small']
+    files = ['national_illness.csv',],# 'electricity.csv', 'traffic.csv','weather.csv', 'ETTh1.csv', 'ETTh2.csv', 
+            #'ETTm1.csv', 'ETTm2.csv']
+    freq = ['d',]# 'h', 'h', 't', 'h', 'h', 
+           # 't', 't']
+    feat_len = [7, ]#321, 862, 21, 7, 7, 
+               # 7, 7]
 
-    epochs = [100, 5, 5, 10, 20, 20, 
-                20, 20]
-    batch_size=[16, 4, 4, 16, 16, 16, 
-                128, 128]
+    epochs = [100, ]#5, 5, 10, 20, 20, 
+                #20, 20]
+    batch_size=[16,]# 4, 4, 16, 16, 16, 
+               # 128, 128]
 
 
     for i in range(len(paths)):
-        print(f'Running on {files[i]}')
+        print(f'Running on {files[0][i]}')
         seq_len = 336
         target_len = 96
 
@@ -177,8 +177,8 @@ if __name__ == '__main__':
                 "lr": 1e-4,
                 "ema": False, # "True" for EMA-like residual addition
                 "decay": 0.9,
-                "residual": True, # "True" for residual addition
-                "embed_strat":"patch",
+                "residual": False, # "True" for residual addition
+                "embed_strat":"sum",
                 "embed_mode": "linear", # "linear" or "cnn
                 "epochs": epochs[i],
                 "batch_size": batch_size[i],
@@ -186,7 +186,7 @@ if __name__ == '__main__':
                 "checkpoint_path": None,
                 "freq": freq[i],
                 "root_path": paths[i],
-                "data_path": files[i],
+                "data_path": files[0][i],
                 }
         
 
@@ -195,7 +195,7 @@ if __name__ == '__main__':
             project="timeseries_embeds",
             config=config,
             log_model=False,
-            mode="offline",
+            mode="online",
         )
         
         config = wandb_logger.experiment.config
@@ -203,7 +203,7 @@ if __name__ == '__main__':
         wandb_logger.experiment.log_code(".")
 
         # cahnge wandb run name with dataset
-        model_name = model_name + f"_{files[i].split('.')[0]}" + f"_{config['embed_strat']}"
+        model_name = model_name + f"_{files[0][i].split('.')[0]}" + f"_{config['embed_strat']}_cnn"
         wandb_logger.experiment.name = model_name
 
         dataset = patchTSTDataloader(
